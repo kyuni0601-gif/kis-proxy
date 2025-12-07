@@ -68,4 +68,70 @@ app.get("/", (req, res) => {
 });
 
 /**
- * 📌 KIS 주가 조회 API 프록시 (그대*
+ * 📌 KIS 주가 조회 API 프록시 (그대로 유지)
+ */
+
+app.post("/price", async (req, res) => {
+  try {
+    const { codes: codesParam, token } = req.body;
+
+    if (!codesParam) {
+      return res.status(400).json({ error: "codes 값이 필요합니다." });
+    }
+
+    const codes = codesParam
+      .split(",")
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
+
+    if (codes.length === 0) {
+      return res.status(400).json({ error: "유효한 종목 코드가 없습니다." });
+    }
+
+    const results = await Promise.all(
+      codes.map((code) =>
+        fetchPrice(code, token).catch((err) => ({
+          code,
+          name: null,
+          price: null,
+          error: err.toString(),
+        }))
+      )
+    );
+
+    res.json({
+      count: results.length,
+      results,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.toString() });
+  }
+});
+
+async function fetchPrice(code, token) {
+  const url = `https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-price`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+      appkey: process.env.APP_KEY,
+      appsecret: process.env.APP_SECRET,
+      tr_id: "FHKST01010100",
+    },
+    qs: {
+      fid_cond_mrkt_div_code: "J",
+      fid_input_iscd: code,
+    },
+  });
+
+  const data = await response.json();
+  return data;
+}
+
+// 서버 시작
+app.listen(3000, () => {
+  console.log("KIS Proxy server running on port 3000");
+});
