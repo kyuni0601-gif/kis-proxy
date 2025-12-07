@@ -37,13 +37,13 @@ async function getToken() {
   const data = await res.json();
 
   cachedToken = data.access_token;
-  // 한국투자 토큰 만료 24시간 (대략)이라고 보고 24시간 캐싱
+  // 한국투자 토큰 만료 24시간
   tokenExpireTime = now + 24 * 60 * 60 * 1000;
 
   return cachedToken;
 }
 
-// 한국투자 현재가 하나 조회 (재사용 함수)
+// 한국투자 현재가 하나 조회
 async function fetchPrice(code, token) {
   const url =
     `https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-price?fid_cond_mrkt_div_code=J&fid_input_iscd=${code}`;
@@ -60,7 +60,6 @@ async function fetchPrice(code, token) {
 
   const json = await response.json();
 
-  // 응답에서 편하게 쓸 수 있게 일부만 추출
   const out = json.output || json.output1 || {};
   const priceStr = out.stck_prpr;
   const name = out.hts_kor_isnm || out.prdt_name || null;
@@ -74,7 +73,7 @@ async function fetchPrice(code, token) {
 }
 
 // -----------------------------
-// ✅ 1) 기존 단일 종목 조회 (/price)
+// ✅ 1) 단일 종목 조회 (/price)
 // -----------------------------
 app.get('/price', async (req, res) => {
   try {
@@ -82,11 +81,11 @@ app.get('/price', async (req, res) => {
     const code = req.query.code;
 
     if (!code) {
-      return res.status(400).json({ error: "code 쿼리값이 필요합니다. 예: /price?code=005930" });
+      return res.status(400).json({ error: "code 파라미터 필요" });
     }
 
     const result = await fetchPrice(code, token);
-    res.json(result.raw);  // 기존 동작 유지 (전체 JSON 그대로 반환)
+    res.json(result.raw);
 
   } catch (e) {
     console.error(e);
@@ -95,8 +94,7 @@ app.get('/price', async (req, res) => {
 });
 
 // -----------------------------
-// ✅ 2) 여러 종목 한 번에 조회 (/prices)
-//     예: /prices?codes=005930,000660,035420
+// ✅ 2) 여러 종목 조회 (/prices)
 // -----------------------------
 app.get('/prices', async (req, res) => {
   try {
@@ -104,22 +102,19 @@ app.get('/prices', async (req, res) => {
     const codesParam = req.query.codes;
 
     if (!codesParam) {
-      return res.status(400).json({
-        error: "codes 쿼리값이 필요합니다. 예: /prices?codes=005930,000660"
-      });
+      return res.status(400).json({ error: "codes 파라미터 필요" });
     }
 
-    // "005930,000660, 035420" → ["005930","000660","035420"]
     const codes = codesParam
       .split(',')
       .map(c => c.trim())
       .filter(c => c.length > 0);
 
     if (codes.length === 0) {
-      return res.status(400).json({ error: "유효한 종목 코드가 없습니다." });
+      return res.status(400).json({ error: "유효한 코드 없음" });
     }
 
-    // 🔥 병렬 처리 (Promise.all) 로 여러 종목 동시에 조회
+    // 병렬 처리
     const results = await Promise.all(
       codes.map(code =>
         fetchPrice(code, token).catch(err => ({
@@ -140,6 +135,16 @@ app.get('/prices', async (req, res) => {
     console.error(e);
     res.status(500).json({ error: e.toString() });
   }
+});
+
+// -----------------------------
+// 🧪 테스트용 웹페이지 (루트 주소)
+// -----------------------------
+app.get('/', (req, res) => {
+  res.send(`
+    <h1>kis-proxy 테스트 페이지</h1>
+    <p>여기까지 나오면 HTML이 정상적으로 동작하는 상태입니다.</p>
+  `);
 });
 
 // -----------------------------
